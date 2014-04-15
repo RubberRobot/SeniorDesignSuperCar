@@ -1,0 +1,12 @@
+09:44:46 **** Build of configuration Debug for project HelloPi ****
+make all 
+Building file: ../HelloPi.cpp
+Invoking: Cross G++ Compiler
+arm-linux-gnueabihf-g++ -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"HelloPi.d" -MT"HelloPi.d" -o "HelloPi.o" "../HelloPi.cpp"
+Finished building: ../HelloPi.cpp
+ 
+Building target: HelloPi
+Invoking: Cross G++ Linker
+arm-linux-gnueabihf-g++  -o "HelloPi"  ./HelloPi.o   
+Finished building target: HelloPi
+ 
