@@ -1,0 +1,15 @@
+11:00:55 **** Build of configuration Debug for project ServoBlaster ****
+make all 
+Building file: ../servod.c
+Invoking: Cross GCC Compiler
+arm-linux-gnueabihf-gcc -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"servod.d" -MT"servod.d" -o "servod.o" "../servod.c"
+Finished building: ../servod.c
+ 
+Building target: ServoBlaster
+Invoking: Cross G++ Linker
+arm-linux-gnueabihf-g++  -o "ServoBlaster"  ./servod.o   
+Finished building target: ServoBlaster
+ 
+
+11:00:57 Build Finished (took 1s.538ms)
+
