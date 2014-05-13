@@ -1,0 +1,36 @@
+//============================================================================
+// Name        : testing.cpp
+// Author      : 
+// Version     :
+// Copyright   : Your copyright notice
+// Description : Hello World in C++, Ansi-style
+//============================================================================
+
+#include <iostream>
+#include <sstream>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+using namespace std;
+
+int main() {
+	// Create an empty property tree object
+	using boost::property_tree::ptree;
+    ptree pt;
+
+	string jsonS = "{ \"root\": { \"values\": [1, 2, 3, 4, 5 ] } }";
+	stringstream lineStream;
+
+	lineStream << jsonS;
+
+	cout << "reading json" << endl;
+	read_json(lineStream, pt);
+	cout << "reading age" << endl;
+	int result = pt.get<int>("values");
+
+	cout << "age: " << result << endl;
+
+
+
+	return 0;
+}
+

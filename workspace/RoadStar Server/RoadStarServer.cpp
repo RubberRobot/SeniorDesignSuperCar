@@ -5,26 +5,45 @@
  *      Author: raspberry
  */
 
-#include <iostream>
-
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-
 #include <pigpio.h>
+#include <iostream>
+#include <sstream>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
 
-#define GPIOsteeringControl 4  //pin 7
-#define GPIOmotorControl 17    //pin 11
+#define GPIOSTEERINGCONTROL 4  //pin 7
+#define GPIOMOTORCONTROL 	17    //pin 11
+#define MAXSTEERINGOFFSET 	200
+#define MAXMOTOROFFSET 		200
+#define SERVOCENTER			1500
 
 using namespace std;
+using boost::property_tree::ptree;
+
 
 typedef websocketpp::server<websocketpp::config::asio> server;
 
 void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
         std::cout << msg->get_payload() << std::endl;
-        int servoInt;
-        std::istringstream(msg->get_payload()) >> servoInt;
+
+        ptree parsedJson;
+    	stringstream jsonStream;
+    	jsonStream << msg->get_payload();
+    	read_json(jsonStream, parsedJson);
+
+    	int servoInt = (int)(SERVOCENTER + ( parsedJson.get<double>("leftAnalog_x") * MAXSTEERINGOFFSET ));
+    	int motorInt = (int)(SERVOCENTER + ( parsedJson.get<double>("rightAnalog_y") * MAXMOTOROFFSET ));
+    	gpioServo(GPIOSTEERINGCONTROL,servoInt);
+    	gpioServo(GPIOMOTORCONTROL, motorInt);
+
+
+
+
+        //std::istringstream(msg->get_payload()) >> servoInt;
         //gpioServo(GPIOsteeringControl, servoInt);
-        gpioServo(GPIOmotorControl, servoInt);
+        //gpioServo(GPIOmotorControl, servoInt);
 }
 
 void GPIOcallBack(int gpio, int level, uint32_t tick){
@@ -34,8 +53,6 @@ void GPIOcallBack(int gpio, int level, uint32_t tick){
 }
 
 int main() {
-    cout << "Hello RPi Development World !"<< endl;
-    cout << "Running servo test" << endl;
 
     int GPIOstatus;
     int GPIOfrequencySteering;
@@ -48,18 +65,21 @@ int main() {
        return 1;
     }
     //steering
-    gpioSetPWMrange(GPIOsteeringControl, 255);
-    gpioSetPWMfrequency(GPIOsteeringControl, 0);
-    GPIOfrequencySteering = gpioGetPWMfrequency(GPIOsteeringControl);
+    gpioSetPWMrange(GPIOSTEERINGCONTROL, 255);
+    gpioSetPWMfrequency(GPIOSTEERINGCONTROL, 0);
+    GPIOfrequencySteering = gpioGetPWMfrequency(GPIOSTEERINGCONTROL);
 
     //motor
-    gpioSetPWMrange(GPIOmotorControl, 255);
-    gpioSetPWMfrequency(GPIOmotorControl, 0);
-    GPIOfrequencyMotor = gpioGetPWMfrequency(GPIOmotorControl);
+    gpioSetPWMrange(GPIOMOTORCONTROL, 255);
+    gpioSetPWMfrequency(GPIOMOTORCONTROL, 0);
+    GPIOfrequencyMotor = gpioGetPWMfrequency(GPIOMOTORCONTROL);
+
+    cout << "FREQ: Using " << GPIOfrequencySteering << " for steering and "
+    		<< GPIOfrequencyMotor << " for motor." << endl;
 
     //gpioSetAlertFunc(GPIOsteeringControl, GPIOcallBack);
 
-    gpioServo(GPIOsteeringControl, 1500);
+    gpioServo(GPIOSTEERINGCONTROL, 1500);
 
     //gpioPWM(GPIO, 128);
 

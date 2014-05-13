@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;RoadStar Server/jsonParser&apos; to &apos;jsonParser.cpp&apos;" description="Rename resource &apos;jsonParser&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="jsonParser" name="jsonParser.cpp" stamp="1399558948763" updateReferences="true"/>
+</session>

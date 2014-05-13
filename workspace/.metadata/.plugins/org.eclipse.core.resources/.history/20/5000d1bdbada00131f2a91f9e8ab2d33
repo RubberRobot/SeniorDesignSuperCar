@@ -1,0 +1,31 @@
+//============================================================================
+// Name        : testing.cpp
+// Author      : 
+// Version     :
+// Copyright   : Your copyright notice
+// Description : Hello World in C++, Ansi-style
+//============================================================================
+
+#include <iostream>
+#include "picojson.h"
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+using namespace std;
+
+int main() {
+    // Create an empty property tree object
+    using boost::property_tree::ptree;
+    ptree pt;
+
+	cout << "!!!Hello World!!!" << endl; // prints !!!Hello World!!!
+
+	string jsonS = "{\“age\”:42,\”name\”:\”John\”}";
+
+	read_json(jsonS, pt);
+
+	cout << "age: " << pt.get("age") << endl;
+
+
+
+	return 0;
+}
