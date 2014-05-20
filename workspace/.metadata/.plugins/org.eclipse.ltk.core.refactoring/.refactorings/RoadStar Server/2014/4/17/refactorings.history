@@ -1,3 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;RoadStar Server/RoadStarServer&apos; to &apos;RoadStarServer0cpp&apos;" description="Rename resource &apos;RoadStarServer&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="RoadStarServer" name="RoadStarServer0cpp" stamp="1398349029066" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;RoadStar Server/RoadStarServer0cpp&apos; to &apos;RoadStarServer.cpp&apos;" description="Rename resource &apos;RoadStarServer0cpp&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="RoadStarServer0cpp" name="RoadStarServer.cpp" stamp="1398349038701" updateReferences="true"/>
-</session>
