@@ -47,7 +47,10 @@
 #define MOUSE_MM_PER_CLICK 4.444
 #define MOUSE_SAMPLE_RATE	250000000
 #define TURN_SIGNAL_RATE	500000000
-
+#define SONAR_SAMPLE_RATE	250000000
+#define COLLISION_THRESHOLD 40
+#define STOP_WAIT			10000000
+#define STOP_SPEED			1470
 
 using namespace std;
 using boost::property_tree::ptree;
@@ -67,7 +70,7 @@ struct state
 	float  speed;
 	float  distanceTraveled;
 	unsigned long lastMessageTime;
-	websocketpp::connection_hdl* client;
+	websocketpp::connection_hdl client;
 	bool obstical;
 	int  sonarRange;
 };
@@ -97,6 +100,7 @@ void  * turnSignal(void * argument);
 void  * speedometer(void * argument);
 void on_message(websocketpp::connection_hdl, server::message_ptr);
 void on_open(websocketpp::connection_hdl hdl);
+void on_close(websocketpp::connection_hdl hdl);
 
 
 int main() {
@@ -158,6 +162,8 @@ int main() {
     ////////////////////////Websocket Server setup////////////////////////
     //what function should be called on a new message
     websocket_server.set_message_handler(&on_message);			//what function should be called on a new message
+    websocket_server.set_open_handler(&on_open);
+    websocket_server.set_close_handler(&on_close);
     websocket_server.init_asio();
     //What ip version and port should we listen on
     websocket_server.listen( boost::asio::ip::tcp::v4() , 8080 );
@@ -171,7 +177,6 @@ int main() {
 
     return 0;
 }
-
 
 void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
 	try{
@@ -201,139 +206,6 @@ void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
 //		pthread_mutex_unlock( &speedometer_mutex );
 //		write_json(jsonWriteStream, answerJson);
 //		websocket_server.send(hdl,jsonWriteStream.str(),websocketpp::frame::opcode::text);
-		currentState.client = &hdl;
-
-
-		//update the servo values
-		currentState.servoInt = (int)(SERVO_CENTER +
-				( parsedJson.get<double>("leftAnalog_x") * MAX_STEERING_OFFSET ));
-
-		if(currentState.cruise == false ){
-			//skip the center range
-			int requestedMotorInt = 0;
-			if( (parsedJson.get<double>("rightAnalog_y") > 0) && (currentState.obstical != true) ){
-				//forward
-				//cout << "rightAnalog_y: " << parsedJson.get<double>("rightAnalog_y") << endl;
-				requestedMotorInt = (int)( parsedJson.get<double>("rightAnalog_y") * MOTOR_FORWARD_RANGE );
-				//cout << "requestedMotirInt(forward): " << requestedMotorInt << endl;
-				if((requestedMotorInt - currentState.lastRequestedMotorInt) > ACCELERATION_THRESHOLD){
-					requestedMotorInt = currentState.lastRequestedMotorInt + ACCELERATION_THRESHOLD;
-					//cout << "Don't accelerate so quickly!" << endl;
-				}
-				currentState.motorInt = MOTOR_FORWARD_START  + requestedMotorInt;
-
-			}else if ( parsedJson.get<double>("rightAnalog_y") < 0){
-				//backward
-				//cout << "rightAnalog_y: " << parsedJson.get<double>("rightAnalog_y") << endl;
-				requestedMotorInt = -1*(int)( parsedJson.get<double>("rightAnalog_y") * MOTOR_BACKWARD_RANGE );
-				//cout << "requestedMotirInt(backward): " << requestedMotorInt << endl;
-				if((currentState.lastRequestedMotorInt - requestedMotorInt) > ACCELERATION_THRESHOLD){
-					requestedMotorInt = currentState.lastRequestedMotorInt - ACCELERATION_THRESHOLD;
-					//cout << "Don't accelerate (backwards) so quickly!" << endl;
-				}
-				currentState.motorInt = MOTOR_BACKWARD_START - requestedMotorInt;
-				if(currentState.cruise){
-					currentState.cruise = false;
-				//	cout << "Cruise mode off." << endl;
-				}
-
-			}else{
-				//stop
-				currentState.motorInt = SERVO_CENTER;
-			}
-
-			//cout << "updating lastRequestedMotorInt: " << currentState.lastRequestedMotorInt << endl;
-			currentState.lastRequestedMotorInt = requestedMotorInt;
-
-			//update motor
-			//cout << "updating motor: " << currentState.motorInt << endl;
-			gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
-		}
-		//update servo
-		gpioServo(GPIO_STEERING_CONTROL,currentState.servoInt);
-
-
-
-		//toggle turn signal
-		//right
-		pthread_mutex_lock( &turnSignal_mutex );
-		if(parsedJson.get<bool>("R1")){
-			if(currentState.rightTurn == true){
-				currentState.rightTurn = false;
-				cout << "Right turn signal off." << endl;
-			}else if(currentState.leftTurn == true){
-				currentState.leftTurn = false;
-				currentState.rightTurn = true;
-				cout << "Left turn signal off." << endl;
-				cout << "Right turn signal on." << endl;
-			}
-			else{
-				currentState.rightTurn = true;
-				currentState.leftTurn = false;
-				cout << "Right turn signal on." << endl;
-			}
-		}
-		//left
-		if(parsedJson.get<bool>("L1")){
-			if(currentState.leftTurn == true){
-				currentState.leftTurn = false;
-				cout << "Left turn signal off." << endl;
-			}else if(currentState.rightTurn == true){
-				currentState.rightTurn = false;
-				currentState.leftTurn = true;
-				cout << "Right turn signal off." << endl;
-				cout << "Left turn signal on." << endl;
-			}else{
-				currentState.leftTurn = true;
-				currentState.rightTurn = false;
-				cout << "Left turn signal on." << endl;
-			}
-		}
-
-		//check for peak
-		if(currentState.leftTurn || currentState.rightTurn){
-			if(currentState.turnPeaked){
-				if(currentState.servoInt == SERVO_CENTER){
-					currentState.leftTurn = false;
-					currentState.rightTurn = false;
-					currentState.turnPeaked = false;
-					cout << "Turn complete" << endl;
-				}
-			}else{
-				if(currentState.leftTurn){
-					if(currentState.servoInt < (SERVO_CENTER - TURN_THRESHOLD)){
-						currentState.turnPeaked = true;
-					}
-				}else if(currentState.rightTurn){
-					if(currentState.servoInt > (SERVO_CENTER + TURN_THRESHOLD)){
-						currentState.turnPeaked = true;
-					}
-				}
-			}
-		}
-		pthread_mutex_unlock( &turnSignal_mutex );
-
-
-
-		//toggle cruise mode
-		if(parsedJson.get<bool>("left")){
-			if(currentState.cruise == true){
-				currentState.cruise = false;
-				cout << "Cruise mode off" << endl;
-			}else{
-				currentState.cruise = true;
-				cout << "Cruise mode on" << endl;
-			}
-		}
-		if(parsedJson.get<bool>("up")){
-			currentState.motorInt = currentState.motorInt + 10;
-			gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
-		}else if(parsedJson.get<bool>("down")){
-			currentState.motorInt = currentState.motorInt - 10;
-			gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
-		}
-
-
 
 		//toggle autonomous mode
 		if(parsedJson.get<bool>("start")){
@@ -345,6 +217,143 @@ void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
 				cout << "Autonomous mode on." << endl;
 			}
 		}
+
+		if(currentState.autonomous != true){
+
+			//update the servo values
+			currentState.servoInt = (int)(SERVO_CENTER +
+					( parsedJson.get<double>("leftAnalog_x") * MAX_STEERING_OFFSET ));
+
+			if(currentState.cruise == false ){
+				//skip the center range
+				int requestedMotorInt = 0;
+				if( (parsedJson.get<double>("rightAnalog_y") > 0) && (currentState.obstical != true) ){
+					//forward
+					//cout << "rightAnalog_y: " << parsedJson.get<double>("rightAnalog_y") << endl;
+					requestedMotorInt = (int)( parsedJson.get<double>("rightAnalog_y") * MOTOR_FORWARD_RANGE );
+					//cout << "requestedMotirInt(forward): " << requestedMotorInt << endl;
+					if((requestedMotorInt - currentState.lastRequestedMotorInt) > ACCELERATION_THRESHOLD){
+						requestedMotorInt = currentState.lastRequestedMotorInt + ACCELERATION_THRESHOLD;
+						//cout << "Don't accelerate so quickly!" << endl;
+					}
+					currentState.motorInt = MOTOR_FORWARD_START  + requestedMotorInt;
+
+				}else if ( parsedJson.get<double>("rightAnalog_y") < 0){
+					//backward
+					//cout << "rightAnalog_y: " << parsedJson.get<double>("rightAnalog_y") << endl;
+					requestedMotorInt = -1*(int)( parsedJson.get<double>("rightAnalog_y") * MOTOR_BACKWARD_RANGE );
+					//cout << "requestedMotirInt(backward): " << requestedMotorInt << endl;
+					if((currentState.lastRequestedMotorInt - requestedMotorInt) > ACCELERATION_THRESHOLD){
+						requestedMotorInt = currentState.lastRequestedMotorInt - ACCELERATION_THRESHOLD;
+						//cout << "Don't accelerate (backwards) so quickly!" << endl;
+					}
+					currentState.motorInt = MOTOR_BACKWARD_START - requestedMotorInt;
+					if(currentState.cruise){
+						currentState.cruise = false;
+					//	cout << "Cruise mode off." << endl;
+					}
+
+				}else{
+					//stop
+					currentState.motorInt = SERVO_CENTER;
+				}
+
+				//cout << "updating lastRequestedMotorInt: " << currentState.lastRequestedMotorInt << endl;
+				currentState.lastRequestedMotorInt = requestedMotorInt;
+
+				//update motor
+				//cout << "updating motor: " << currentState.motorInt << endl;
+				gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
+			}
+			//update servo
+			gpioServo(GPIO_STEERING_CONTROL,currentState.servoInt);
+
+
+
+			//toggle turn signal
+			//right
+			pthread_mutex_lock( &turnSignal_mutex );
+			if(parsedJson.get<bool>("R1")){
+				if(currentState.rightTurn == true){
+					currentState.rightTurn = false;
+					cout << "Right turn signal off." << endl;
+				}else if(currentState.leftTurn == true){
+					currentState.leftTurn = false;
+					currentState.rightTurn = true;
+					cout << "Left turn signal off." << endl;
+					cout << "Right turn signal on." << endl;
+				}
+				else{
+					currentState.rightTurn = true;
+					currentState.leftTurn = false;
+					cout << "Right turn signal on." << endl;
+				}
+			}
+			//left
+			if(parsedJson.get<bool>("L1")){
+				if(currentState.leftTurn == true){
+					currentState.leftTurn = false;
+					cout << "Left turn signal off." << endl;
+				}else if(currentState.rightTurn == true){
+					currentState.rightTurn = false;
+					currentState.leftTurn = true;
+					cout << "Right turn signal off." << endl;
+					cout << "Left turn signal on." << endl;
+				}else{
+					currentState.leftTurn = true;
+					currentState.rightTurn = false;
+					cout << "Left turn signal on." << endl;
+				}
+			}
+
+			//check for peak
+			if(currentState.leftTurn || currentState.rightTurn){
+				if(currentState.turnPeaked){
+					if(currentState.servoInt == SERVO_CENTER){
+						currentState.leftTurn = false;
+						currentState.rightTurn = false;
+						currentState.turnPeaked = false;
+						cout << "Turn complete" << endl;
+					}
+				}else{
+					if(currentState.leftTurn){
+						if(currentState.servoInt < (SERVO_CENTER - TURN_THRESHOLD)){
+							currentState.turnPeaked = true;
+						}
+					}else if(currentState.rightTurn){
+						if(currentState.servoInt > (SERVO_CENTER + TURN_THRESHOLD)){
+							currentState.turnPeaked = true;
+						}
+					}
+				}
+			}
+			pthread_mutex_unlock( &turnSignal_mutex );
+
+
+
+			//toggle cruise mode
+			if(parsedJson.get<bool>("left")){
+				if(currentState.cruise == true){
+					currentState.cruise = false;
+					cout << "Cruise mode off" << endl;
+				}else{
+					currentState.cruise = true;
+					cout << "Cruise mode on" << endl;
+				}
+			}
+			if(parsedJson.get<bool>("up")){
+				currentState.motorInt = currentState.motorInt + 10;
+				gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
+			}else if(parsedJson.get<bool>("down")){
+				currentState.motorInt = currentState.motorInt - 10;
+				gpioServo(GPIO_MOTOR_CONTROL, currentState.motorInt);
+			}
+
+		}
+
+
+
+
 
 
 
@@ -366,8 +375,10 @@ void on_message(websocketpp::connection_hdl hdl, server::message_ptr msg) {
 }
 
 void * sonar(void * arguments){
+	const timespec waitTime = { 0, SONAR_SAMPLE_RATE };
+	const timespec waitTimeStop = { 0, STOP_WAIT };
 	int fd;														// File descrition
-	const char *fileName = "/dev/i2c-1";								// Name of the port we will be using
+	const char *fileName = "/dev/i2c-1";						// Name of the port we will be using
 	int  address = 0x70;										// Address of the SRF02 shifted right one bit
 	unsigned char buf[10];										// Buffer for data being read/ written on the i2c bus
 	unsigned char readBuf[4];
@@ -394,7 +405,7 @@ void * sonar(void * arguments){
 			cout << "Error writing to slave" << endl;
 		}
 
-		sleep(1);
+		nanosleep(&waitTime,NULL);
 
 		buf[0] = 0;
 		//get sonar data
@@ -406,15 +417,24 @@ void * sonar(void * arguments){
 		}
 
 		//set sonar range or perform operations
-		pthread_mutex_lock( &sonarRange_mutex );
+
 		sonarRange = readBuf[2];
 		sonarRange = (sonarRange << 8) + readBuf[3];
-		//cout << "sonar range = " << sonarRange << endl;
+		cout << "sonar range = " << sonarRange << endl;
+		pthread_mutex_lock( &sonarRange_mutex );
 		currentState.sonarRange = sonarRange;
-		if(sonarRange < 15){
+		if(sonarRange < COLLISION_THRESHOLD){
 			currentState.obstical = true;
-			gpioServo(GPIO_MOTOR_CONTROL,SERVO_CENTER);
-			currentState.motorInt = SERVO_CENTER;
+			if(currentState.motorInt >= MOTOR_FORWARD_START){
+				gpioServo(GPIO_MOTOR_CONTROL,STOP_SPEED);
+				currentState.motorInt = STOP_SPEED;
+				gpioServo(GPIO_MOTOR_CONTROL,STOP_SPEED);
+				nanosleep(&waitTimeStop,NULL);
+				gpioServo(GPIO_MOTOR_CONTROL,SERVO_CENTER);
+				currentState.motorInt = SERVO_CENTER;
+			}
+
+			cout << "OBSTICAL!" << endl;
 		}else{
 			currentState.obstical = false;
 		}
@@ -504,21 +524,26 @@ void * speedometer(void * argument){
 	    	}
 	    }
 
-	   // cout << "aquireing mutex" << endl;
+	   //cout << "aquireing mutex" << endl;
 		pthread_mutex_lock( &speedometer_mutex );
+
 		//cout << "aquired mutex" << endl;
 		currentState.speed = (counter * MOUSE_MM_PER_CLICK) * 2;   //mm/s
 		currentState.distanceTraveled = counter * MOUSE_MM_PER_CLICK;				//mm.
-		cout << "speed: " << currentState.speed << " distance: " << currentState.distanceTraveled << endl;
+		//cout << "speed: " << currentState.speed << " distance: " << currentState.distanceTraveled << endl;
 
 		ptree answerJson;
 		stringstream jsonWriteStream;
-		//pthread_mutex_lock( &speedometer_mutex );
+
 		answerJson.put("speed", currentState.speed);
 		answerJson.put("distanceTraveled", currentState.distanceTraveled);
 		write_json(jsonWriteStream, answerJson);
-		websocket_server.send(*currentState.client,jsonWriteStream.str(),websocketpp::frame::opcode::text);
-		//pthread_mutex_unlock( &speedometer_mutex );
+		//cout << "sending speedometer" << endl;
+		if(currentState.connected){
+			websocket_server.send(currentState.client,jsonWriteStream.str(),websocketpp::frame::opcode::text);
+
+		}
+		pthread_mutex_unlock( &speedometer_mutex );
 		//cout << "released mutex" << endl;
 	}
 
@@ -528,6 +553,13 @@ void * speedometer(void * argument){
 void on_open(websocketpp::connection_hdl hdl){
 	cout << "Controller connected." << endl;
 	currentState.connected = true;
+	currentState.client = hdl;
+	cout << "Client hdl saved." << endl;
+
+}
+void on_close(websocketpp::connection_hdl hdl){
+	currentState.connected = false;
+	cout << "Controller disconnected." << endl;
 }
 
 void GPIOcallBack(int gpio, int level, uint32_t tick){
